@@ -1,7 +1,7 @@
 const { Engine, Render, Runner, World, Bodies, Body, Events, Composite, Vector, Detector } = Matter;
 
 // Configuration
-const GAME_SIZE = 800; // Canvas size (Internal logical size)
+const GAME_SIZE = 460; // Canvas size (Internal logical size)
 const CENTER = { x: GAME_SIZE / 2, y: GAME_SIZE / 2 };
 const BOWL_RADIUS = 150; // 300px diameter (Requested)
 const ORBIT_RADIUS = 200; // 400px diameter (Requested)
@@ -230,10 +230,10 @@ function init() {
 let lastShotBodyId = null;
 
 function handleInput(e) {
-    if (e.type === 'touchstart') e.preventDefault(); // Prevent scroll
+    // Check if clicking a button - Allow default behavior (click)
+    if (e.target.tagName === 'BUTTON' || e.target.parentElement.tagName === 'BUTTON') return;
 
-    // Check if clicking a button
-    if (e.target.tagName === 'BUTTON') return;
+    if (e.type === 'touchstart') e.preventDefault(); // Prevent scroll/zoom on game area only
 
     if (isGameOver) return;
 
@@ -248,10 +248,18 @@ function handleInput(e) {
 }
 
 function showStartMessage() {
+    const existingMsg = document.getElementById('start-message');
+    if (existingMsg) existingMsg.remove();
+
     const msg = document.createElement('div');
     msg.id = 'start-message';
-    msg.innerHTML = "<h1>Tap Anywhere to Start</h1>";
+    msg.innerHTML = "<h1>Tap Anywhere<br>to Start</h1>"; // Line break
     msg.style.position = 'absolute';
+    msg.style.top = '50%';
+    msg.style.left = '50%';
+    msg.style.transform = 'translate(-50%, -50%)'; // True Center
+    msg.style.textAlign = 'center'; // Center text
+    msg.style.width = '100%';
     msg.style.color = 'white';
     msg.style.fontSize = '32px';
     msg.style.pointerEvents = 'none';
@@ -379,12 +387,13 @@ function resetGame() {
 document.getElementById('retry-btn-top').addEventListener('click', resetGame);
 document.getElementById('retry-btn').addEventListener('click', resetGame);
 document.getElementById('share-btn').addEventListener('click', () => {
-    const text = `I scored ${score} in ComboGame! Can you beat me?`;
+    const url = "https://nika-deltah.github.io/ComboGame/";
+    const text = `I scored ${score} in ComboGame! Can you beat me? ${url}`;
     if (navigator.share) {
         navigator.share({
             title: 'ComboGame',
             text: text,
-            url: window.location.href
+            url: url
         });
     } else {
         alert('Share copied to clipboard: ' + text);
