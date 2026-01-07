@@ -9,20 +9,22 @@ const GAMEOVER_RADIUS = 152.5; // 305px diameter
 const WARNING_TRIGGER_RADIUS = 145; // 290px diameter
 const WARNING_LINE_RADIUS = 150; // 300px diameter
 
-// Sizes: 15, 20, 30, 40, 50, 60, 70, 80, 90, 100
-const BALL_RADII = [7.5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
+// Sizes: 25, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130 (Diameters)
+// Radii: 12.5, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65
+const BALL_RADII = [12.5, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65];
 
 // Placeholder Colors
 const BALL_COLORS = [
     '#FF3333', '#FF9933', '#FFFF33', '#33FF33', '#33FFFF',
-    '#3333FF', '#9933FF', '#FF33FF', '#FFFFFF', '#000000'
+    '#3333FF', '#9933FF', '#FF33FF', '#FFFFFF', '#000000',
+    '#FF5733', '#33FF57'
 ];
 
 // --- IMAGE REPLACEMENT CONFIGURATION ---
 // To use images:
-// 1. Put images named 1.png, 2.png... 10.png in the 'assets' folder.
+// 1. Put images named 001.png... 012.png in the 'assets' folder.
 // 2. Set USE_IMAGES = true;
-const USE_IMAGES = false;
+const USE_IMAGES = true;
 // ---------------------------------------
 
 let engine;
@@ -39,12 +41,17 @@ let orbitAngle = 0;
 let orbitSpeed = 0.02;
 
 // Elements
-const scoreEl = document.getElementById('score');
+const scoreEl = document.getElementById('score'); // Live Score
 const finalScoreEl = document.getElementById('final-score');
-const gameOverScreen = document.getElementById('game-over-screen');
+const gameHeader = document.getElementById('game-header');
+const gameFooter = document.getElementById('game-footer');
 const retryBtn = document.getElementById('retry-btn');
-// const goBtn = document.getElementById('go-btn'); // Removed
+const retryBtnTop = document.getElementById('retry-btn-top');
 const shareBtn = document.getElementById('share-btn');
+const screenshotBtn = document.getElementById('screenshot-btn');
+const mainWrapper = document.getElementById('main-wrapper');
+const uiLayer = document.getElementById('ui-layer'); // In-Game UI
+
 
 function init() {
     // Create Engine
@@ -52,8 +59,6 @@ function init() {
     engine.world.gravity.y = 0;
 
     // Create Renderer
-    // We keep internal size 800x800 for consistent physics, 
-    // but CSS will scale it to fit screen.
     render = Render.create({
         element: document.getElementById('game-container'),
         engine: engine,
@@ -74,6 +79,11 @@ function init() {
 
     // Initial message
     showStartMessage();
+
+    // Ensure Init State: Header/Footer hidden, UI shown (but msg covers it)
+    gameHeader.classList.add('hidden');
+    gameFooter.classList.add('hidden');
+    uiLayer.classList.remove('hidden');
 
     // Custom Rendering for Bowl and Orbit
     Events.on(render, 'afterRender', () => {
@@ -111,30 +121,30 @@ function init() {
 
         // Draw Preview Ball
         if (previewBall && isPlaying) {
-
             if (USE_IMAGES) {
-                // --- IMAGE RENDERING ---
-                // If using images, we need to draw the image instead of circle
-                // This is a manual draw for the preview (since it's not a body yet)
+                // Image Rendering
+                const imageIndex = String(previewBall.level + 1).padStart(3, '0');
+                // Note: creating new image every frame is bad practice usually, but for low-freq preview works here.
+                // Ideally we pre-load, but assuming browser cache handles it.
                 const img = new Image();
-                img.src = `assets/${previewBall.level + 1}.png`; // 1.png, 2.png...
-                // Note: Loading, creating new Image every frame is inefficient but works for this level of demo.
-                // Ideally preload or cache.
-                /*
-                const size = previewBall.radius * 2;
-                ctx.drawImage(img, previewBall.x - previewBall.radius, previewBall.y - previewBall.radius, size, size);
-                */
-                // Only draw logic if we actually implemented the loader check, for now fallback to color with comment.
-            }
+                img.src = `assets/${imageIndex}.png`;
 
-            // Fallback / Color Mode (Always draw circle unless specific override)
-            ctx.beginPath();
-            ctx.arc(previewBall.x, previewBall.y, previewBall.radius, 0, 2 * Math.PI);
-            ctx.fillStyle = previewBall.color;
-            ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1;
-            ctx.stroke();
+                const size = previewBall.radius * 2;
+
+                ctx.save();
+                ctx.translate(previewBall.x, previewBall.y);
+                ctx.drawImage(img, -previewBall.radius, -previewBall.radius, size, size);
+                ctx.restore();
+            } else {
+                // Fallback Color Mode
+                ctx.beginPath();
+                ctx.arc(previewBall.x, previewBall.y, previewBall.radius, 0, 2 * Math.PI);
+                ctx.fillStyle = previewBall.color;
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
         }
     });
 
@@ -173,7 +183,7 @@ function init() {
             // Check Distances
             const edgeDist = distance + body.circleRadius;
 
-            // Warning Check (290px -> 145 radius)
+            // Warning Check
             if (edgeDist > WARNING_TRIGGER_RADIUS) {
                 if (body.id !== (lastShotBodyId || -1)) {
                     warningTriggered = true;
@@ -182,7 +192,7 @@ function init() {
                 }
             }
 
-            // Game Over Check (305px -> 152.5 radius)
+            // Game Over Check
             if (edgeDist > GAMEOVER_RADIUS) {
                 if (body.speed < 0.5 && body.id !== (lastShotBodyId || -1)) {
                     endGame();
@@ -212,7 +222,7 @@ function init() {
             const bodyB = pairs[i].bodyB;
 
             if (bodyA.level !== undefined && bodyB.level !== undefined) {
-                if (bodyA.level === bodyB.level && bodyA.level < 9) {
+                if (bodyA.level === bodyB.level && bodyA.level < 11) { // 12 levels (0-11)
                     mergeBalls(bodyA, bodyB);
                 }
             }
@@ -230,18 +240,14 @@ function init() {
 let lastShotBodyId = null;
 
 function handleInput(e) {
-    // Check if clicking a button - Allow default behavior (click)
     if (e.target.tagName === 'BUTTON' || e.target.parentElement.tagName === 'BUTTON') return;
-
-    if (e.type === 'touchstart') e.preventDefault(); // Prevent scroll/zoom on game area only
-
+    if (e.type === 'touchstart') e.preventDefault();
     if (isGameOver) return;
 
     if (!isPlaying) {
         isPlaying = true;
         const msg = document.getElementById('start-message');
         if (msg) msg.style.display = 'none';
-        // return; // REMOVED to allow immediate shoot
     }
 
     shoot();
@@ -253,12 +259,12 @@ function showStartMessage() {
 
     const msg = document.createElement('div');
     msg.id = 'start-message';
-    msg.innerHTML = "<h1>Tap Anywhere<br>to Start</h1>"; // Line break
+    msg.innerHTML = "<h1>Tap Anywhere<br>to Start</h1>";
     msg.style.position = 'absolute';
     msg.style.top = '50%';
     msg.style.left = '50%';
-    msg.style.transform = 'translate(-50%, -50%)'; // True Center
-    msg.style.textAlign = 'center'; // Center text
+    msg.style.transform = 'translate(-50%, -50%)';
+    msg.style.textAlign = 'center';
     msg.style.width = '100%';
     msg.style.color = 'white';
     msg.style.fontSize = '32px';
@@ -285,20 +291,19 @@ function spawnPreview() {
 function shoot() {
     if (!previewBall || isGameOver) return;
 
-    // Create physical body
     const renderConfig = USE_IMAGES ? {
         sprite: {
-            texture: `assets/${previewBall.level + 1}.png`,
-            xScale: (previewBall.radius * 2) / 100, // Assuming 100px source image
-            yScale: (previewBall.radius * 2) / 100
+            texture: `assets/${String(previewBall.level + 1).padStart(3, '0')}.png`,
+            xScale: (previewBall.radius * 2) / 250, // Source: 250px
+            yScale: (previewBall.radius * 2) / 250
         }
     } : {
         fillStyle: previewBall.color
     };
 
     const body = Bodies.circle(previewBall.x, previewBall.y, previewBall.radius, {
-        restitution: 0.3,
-        friction: 0.005,
+        restitution: 0.5,
+        friction: 0.05,
         frictionAir: 0.02,
         render: renderConfig
     });
@@ -340,24 +345,24 @@ function mergeBalls(bodyA, bodyB) {
 
     const renderConfig = USE_IMAGES ? {
         sprite: {
-            texture: `assets/${newLevel + 1}.png`,
-            xScale: (radius * 2) / 100,
-            yScale: (radius * 2) / 100
+            texture: `assets/${String(newLevel + 1).padStart(3, '0')}.png`,
+            xScale: (radius * 2) / 250, // Source: 250px
+            yScale: (radius * 2) / 250
         }
     } : {
         fillStyle: BALL_COLORS[newLevel]
     };
 
     const newBody = Bodies.circle(midX, midY, radius, {
-        restitution: 0.3,
-        friction: 0.005,
+        restitution: 0.5,
+        friction: 0.05,
         frictionAir: 0.02,
         render: renderConfig
     });
     newBody.level = newLevel;
     Body.setVelocity(newBody, { x: (Math.random() - 0.5), y: (Math.random() - 0.5) });
 
-    // Pop Animation: Start larger
+    // Pop Animation
     Body.scale(newBody, 1.2, 1.2);
     newBody.isPopping = true;
 
@@ -368,7 +373,10 @@ function endGame() {
     if (isGameOver) return;
     isGameOver = true;
     finalScoreEl.textContent = score;
-    gameOverScreen.classList.remove('hidden');
+    // Show Header and Footer, Hide In-Game UI
+    gameHeader.classList.remove('hidden');
+    gameFooter.classList.remove('hidden');
+    uiLayer.classList.add('hidden');
 }
 
 function resetGame() {
@@ -377,29 +385,62 @@ function resetGame() {
     score = 0;
     scoreEl.textContent = '0';
     isGameOver = false;
-    gameOverScreen.classList.add('hidden');
+    // Hide Header and Footer, Show In-Game UI
+    gameHeader.classList.add('hidden');
+    gameFooter.classList.add('hidden');
+    uiLayer.classList.remove('hidden');
     isPlaying = false;
     showStartMessage();
     spawnPreview();
 }
 
 // Global UI Handlers
-document.getElementById('retry-btn-top').addEventListener('click', resetGame);
-document.getElementById('retry-btn').addEventListener('click', resetGame);
-document.getElementById('share-btn').addEventListener('click', () => {
-    const url = "https://nika-deltah.github.io/ComboGame/";
-    const text = `I scored ${score} in ComboGame! Can you beat me? ${url}`;
-    if (navigator.share) {
-        navigator.share({
-            title: 'ComboGame',
-            text: text,
-            url: url
+if (retryBtnTop) retryBtnTop.addEventListener('click', resetGame);
+if (retryBtn) retryBtn.addEventListener('click', resetGame);
+
+if (screenshotBtn) {
+    screenshotBtn.addEventListener('click', () => {
+        // Screenshot Logic: Capture Main Wrapper logic
+        // Hide buttons for screenshot
+        gameFooter.classList.add('hidden');
+        if (retryBtnTop) retryBtnTop.style.display = 'none';
+
+        html2canvas(mainWrapper, {
+            backgroundColor: '#222', // Match Theme
+            scale: 2, // High Res
+            useCORS: true,
+            // allowTaint removed to avoid SecurityError on toDataURL
+            logging: false
+        }).then(canvas => {
+            // Restore
+            gameFooter.classList.remove('hidden');
+            if (retryBtnTop) retryBtnTop.style.display = 'block';
+
+            const link = document.createElement('a');
+            link.download = `ComboGame_Score_${score}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        }).catch(err => {
+            console.error(err);
+            gameFooter.classList.remove('hidden');
+            if (retryBtnTop) retryBtnTop.style.display = 'block';
+            alert('Screenshot failed.');
         });
-    } else {
-        alert('Share copied to clipboard: ' + text);
-        navigator.clipboard.writeText(text);
-    }
-});
+    });
+}
+
+if (shareBtn) {
+    shareBtn.addEventListener('click', () => {
+        const url = "https://nika-deltah.github.io/ComboGame/";
+        const text = `I scored ${score} in ComboGame! Can you beat me? ${url}`;
+        if (navigator.share) {
+            navigator.share({ title: 'ComboGame', text: text, url: url });
+        } else {
+            navigator.clipboard.writeText(text);
+            alert('Copied to clipboard!');
+        }
+    });
+}
 
 // Start
 init();
