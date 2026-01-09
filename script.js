@@ -51,7 +51,62 @@ const shareBtn = document.getElementById('share-btn');
 const screenshotBtn = document.getElementById('screenshot-btn');
 const mainWrapper = document.getElementById('main-wrapper');
 const uiLayer = document.getElementById('ui-layer'); // In-Game UI
+const settingsBtn = document.getElementById('settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const closeSettingsBtn = document.getElementById('close-settings');
+const bgmSlider = document.getElementById('bgm-volume');
+const sfxSlider = document.getElementById('sfx-volume');
+const loadingScreen = document.getElementById('loading-screen');
+const loadingProgress = document.getElementById('loading-progress');
 
+// Audio
+const bgm = new Audio('assets/bgm.mp3');
+bgm.loop = true;
+const clickSound = new Audio('assets/click.mp3');
+const mergeSound = new Audio('assets/merge.mp3');
+
+// Asset Lists
+const IMAGES_TO_LOAD = [
+    'assets/001.png', 'assets/002.png', 'assets/003.png', 'assets/004.png',
+    'assets/005.png', 'assets/006.png', 'assets/007.png', 'assets/008.png',
+    'assets/009.png', 'assets/010.png', 'assets/011.png', 'assets/012.png'
+];
+
+// Audio Init Volume
+let bgmVolume = 0.5;
+let sfxVolume = 0.5;
+
+bgm.volume = bgmVolume;
+clickSound.volume = sfxVolume;
+mergeSound.volume = sfxVolume;
+
+async function preloadAssets() {
+    let loadedCount = 0;
+    const totalAssets = IMAGES_TO_LOAD.length; // Intentionally only tracking images for visual loading bar
+    // Audio preloading is less visual, but we can try to fetch them too.
+
+    const updateProgress = () => {
+        loadedCount++;
+        const percent = Math.floor((loadedCount / totalAssets) * 100);
+        if (loadingProgress) loadingProgress.textContent = percent + '%';
+        if (loadedCount >= totalAssets) {
+            setTimeout(() => {
+                loadingScreen.style.display = 'none';
+                init();
+            }, 500); // Small delay for smoothness
+        }
+    };
+
+    IMAGES_TO_LOAD.forEach(src => {
+        const img = new Image();
+        img.onload = updateProgress;
+        img.onerror = (e) => {
+            console.error('Failed to load image:', src, e);
+            updateProgress(); // Continue anyway to avoid hanging
+        };
+        img.src = src;
+    });
+}
 
 function init() {
     // Create Engine
@@ -248,6 +303,11 @@ function handleInput(e) {
         isPlaying = true;
         const msg = document.getElementById('start-message');
         if (msg) msg.style.display = 'none';
+
+        // Try play BGM on first interaction
+        if (bgm.paused && bgm.volume > 0) {
+            bgm.play().catch(e => console.log("BGM waiting for interaction"));
+        }
     }
 
     shoot();
@@ -321,6 +381,9 @@ function shoot() {
         y: (dy / dist) * speed
     });
 
+    // Play Shoot Sound
+    playSound(clickSound);
+
     World.add(engine.world, body);
     previewBall = null;
 
@@ -340,6 +403,9 @@ function mergeBalls(bodyA, bodyB) {
 
     score += (newLevel + 1) * 10;
     scoreEl.textContent = score;
+
+    // Play Merge Sound
+    playSound(mergeSound);
 
     const radius = BALL_RADII[newLevel];
 
@@ -394,38 +460,107 @@ function resetGame() {
     spawnPreview();
 }
 
+// Helper to play SFX (clone node to allow overlapping)
+function playSound(audio) {
+    if (audio.volume > 0) {
+        const clone = audio.cloneNode();
+        clone.volume = audio.volume;
+        clone.play().catch(e => console.warn('Audio play failed', e));
+    }
+}
+
 // Global UI Handlers
 if (retryBtnTop) retryBtnTop.addEventListener('click', resetGame);
 if (retryBtn) retryBtn.addEventListener('click', resetGame);
 
+// Settings UI Handlers
+if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+        settingsModal.classList.remove('hidden');
+        settingsModal.style.display = 'flex';
+        // Pause game? Maybe not, keep it flowing
+    });
+}
+
+if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+        settingsModal.style.display = 'none';
+
+        // Ensure BGM starts if it wasn't playing (user interaction)
+        if (bgm.paused && bgm.volume > 0) {
+            bgm.play().catch(e => console.warn("BGM autoplay prevented", e));
+        }
+    });
+}
+
+bgmSlider.addEventListener('input', (e) => {
+    bgmVolume = e.target.value / 100;
+    bgm.volume = bgmVolume;
+    if (bgmVolume > 0 && bgm.paused) {
+        bgm.play().catch(e => console.warn("BGM play failed", e));
+    }
+});
+
+sfxSlider.addEventListener('input', (e) => {
+    sfxVolume = e.target.value / 100;
+    clickSound.volume = sfxVolume;
+    mergeSound.volume = sfxVolume;
+});
+
+
 if (screenshotBtn) {
     screenshotBtn.addEventListener('click', () => {
-        // Screenshot Logic: Capture Main Wrapper logic
-        // Hide buttons for screenshot
-        gameFooter.classList.add('hidden');
-        if (retryBtnTop) retryBtnTop.style.display = 'none';
+        // Manual Screenshot Composition
+        // 1. Create a temporary canvas
+        const captureCanvas = document.createElement('canvas');
+        const gameCanvas = document.querySelector('#game-container canvas'); // Matter.js canvas
 
-        html2canvas(mainWrapper, {
-            backgroundColor: '#222', // Match Theme
-            scale: 2, // High Res
-            useCORS: true,
-            // allowTaint removed to avoid SecurityError on toDataURL
-            logging: false
-        }).then(canvas => {
-            // Restore
-            gameFooter.classList.remove('hidden');
-            if (retryBtnTop) retryBtnTop.style.display = 'block';
+        if (!gameCanvas) {
+            alert('Game canvas not found!');
+            return;
+        }
 
+        captureCanvas.width = gameCanvas.width;
+        captureCanvas.height = gameCanvas.height + 150; // Extra height for Header/Footer info
+        const ctx = captureCanvas.getContext('2d');
+
+        // 2. Fill Background
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0, 0, captureCanvas.width, captureCanvas.height);
+
+        // 3. Draw Header Info manually (Since we can't capture HTML easily without html2canvas issues)
+        // Center the content vertically/horizontally
+        const centerX = captureCanvas.width / 2;
+
+        ctx.fillStyle = '#ff4444';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'white';
+        ctx.strokeText('Game Over', centerX, 60);
+        ctx.fillText('Game Over', centerX, 60);
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 36px Arial';
+        ctx.fillText('Score: ' + score, centerX, 110);
+
+        // 4. Draw Game Canvas
+        // Position it below the header
+        const gameY = 150;
+        ctx.drawImage(gameCanvas, 0, gameY);
+
+        // 5. Download
+        try {
+            const dataURL = captureCanvas.toDataURL('image/png');
             const link = document.createElement('a');
-            link.download = `ComboGame_Score_${score}.PNG`;
-            link.href = canvas.toDataURL();
+            link.download = `ComboGame_Score_${score}.png`;
+            link.href = dataURL;
             link.click();
-        }).catch(err => {
+        } catch (err) {
             console.error(err);
-            gameFooter.classList.remove('hidden');
-            if (retryBtnTop) retryBtnTop.style.display = 'block';
-            alert('Screenshot failed.');
-        });
+            alert('Screenshot failed. If you are running locally (file://), browsers verify security. Please try on a local server or GitHub Pages.');
+        }
     });
 }
 
@@ -443,5 +578,5 @@ if (shareBtn) {
 }
 
 // Start
-init();
-
+// init(); // Removed, called by preloadAssets
+preloadAssets();
